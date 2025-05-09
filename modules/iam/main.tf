@@ -2,33 +2,7 @@ provider "aws" {
   region = "us-east-2"
 }
 
-# IAM Role for GitHub Actions
-resource "aws_iam_role" "github_actions_role" {
-  name = "${var.environment}-GitHubActionsECR"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Federated = "arn:aws:iam::${var.aws_account_id}:oidc-provider/token.actions.githubusercontent.com"
-        }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          }
-          StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:*/fintech-app:*"
-          }
-        }
-      }
-    ]
-  })
-}
-
-# Use this Terraform configuration to create the GitHub Actions OIDC provider in AWS
+# GitHub Actions OIDC Provider
 resource "aws_iam_openid_connect_provider" "github_oidc" {
   url = "https://token.actions.githubusercontent.com"
 
@@ -41,7 +15,36 @@ resource "aws_iam_openid_connect_provider" "github_oidc" {
   ]
 }
 
-# Attach ECR permissions to IAM Role
+# IAM Role for GitHub Actions (ECR + EKS)
+resource "aws_iam_role" "github_actions_role" {
+  name = "${var.environment}-GitHubActionsECR"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.github_oidc.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
+          StringLike = {
+            # Replace with your actual org/repo and optionally restrict to a branch
+            "token.actions.githubusercontent.com:sub" = "repo:your-org/fintech-app:ref:refs/heads/main"
+          }
+        }
+      }
+    ]
+  })
+
+  depends_on = [aws_iam_openid_connect_provider.github_oidc]
+}
+
+# ECR Access Policy
 resource "aws_iam_policy" "github_ecr_policy" {
   name        = "${var.environment}-GitHubECRPolicy"
   description = "Permissions for GitHub Actions to push/pull from ECR"
@@ -65,7 +68,7 @@ resource "aws_iam_policy" "github_ecr_policy" {
           "ecr:DescribeImages",
           "ecr:BatchGetImage"
         ]
-        Resource = "arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:*"
+        Resource = "arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/*"
       },
       {
         Effect = "Allow"
@@ -75,9 +78,8 @@ resource "aws_iam_policy" "github_ecr_policy" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage"
         ]
-        Resource = "arn:aws:ecr:${var.aws_region}:*"
+        Resource = "arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/*"
       },
-      # Allow GitHub Actions to assume the role correctly
       {
         Effect = "Allow"
         Action = "sts:TagSession"
@@ -87,12 +89,12 @@ resource "aws_iam_policy" "github_ecr_policy" {
   })
 }
 
-
-# Attach EKS permissions to IAM Role
+# EKS Access Policy
 resource "aws_iam_policy" "github_eks_policy" {
   name        = "${var.environment}-GitHubEKSPolicy"
   description = "Permissions for GitHub Actions to deploy to EKS"
-  policy      = jsonencode({
+
+  policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
@@ -126,4 +128,7 @@ resource "aws_iam_role_policy_attachment" "attach_eks" {
   policy_arn = aws_iam_policy.github_eks_policy.arn
 }
 
-
+# Optional Output for GitHub to Assume Role
+output "github_actions_role_arn" {
+  value = aws_iam_role.github_actions_role.arn
+}
