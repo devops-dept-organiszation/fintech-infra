@@ -1,6 +1,6 @@
 variable "aws_account_id" {
   description = "AWS Account ID"
-  default     = "999568710647"
+  default     = "862994312799"
 }
 
 variable "tags" {
@@ -13,7 +13,7 @@ variable "tags" {
 
 variable "aws_region" {
   description = "AWS Region"
-  default     = "us-east-1"
+  default     = "us-east-2"
 }
 
 variable "environment" {
