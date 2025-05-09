@@ -1,5 +1,5 @@
-region            = "us-east-1"
-ami_id            = "ami-0c55b159cbfafe1f0"
+region            = "us-east-2"
+ami_id            = "ami-04f167a56786e4b09"
 instance_type     = "t2.medium"
 key_name          = "your-key-pair-name"
 security_group_id = "your-security-group-id"
